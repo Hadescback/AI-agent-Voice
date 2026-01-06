@@ -1,0 +1,296 @@
+{
+  "name": "AI Agent workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "3a476f23-3eb2-43e2-8b09-ee5a7f73d68c",
+      "name": "Telegram Voice Message Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        368
+      ],
+      "webhookId": "50bb5036-5fe5-4e77-8d07-ae0fbf9a674b",
+      "credentials": {
+        "telegramApi": {
+          "id": "8NTZjdUwSQ1Nsa2z",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot8579089777:AAFUPhrF8hVvK7wM2ySJjSicbTlBCwlSKw4/getFile?file_id={{ $json.message.voice.file_id }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "1f056333-f88f-43fb-b9a3-69134375b18d",
+      "name": "Download Voice File from Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        624,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.assemblyai.com/v2/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "ade2c591b426423984dd54faa9fc5145"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"config\": {\n    \"encoding\": \"OGG_OPUS\",\n    \"sampleRateHertz\": 48000,\n    \"languageCode\": \"en-US\"\n  },\n  \"audio\": {\n    \"content\": \"{{ $json.audioContent }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "d64259d5-8bae-4ea8-97cf-b38b1c214a5f",
+      "name": "Transcribe Audio with Google Speech-to-Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1296,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst telegramTriggerData = $(\"Telegram Voice Message Trigger\").first().json;\n\nreturn items.map(item => {\n  if (!item.binary || !item.binary.voiceFile) {\n    throw new Error('No voice file found in one of the items');\n  }\n  const base64Audio = item.binary.voiceFile.data;\n  \n  return {\n    json: {\n      audioContent: base64Audio,\n      chatId: telegramTriggerData.message.chat.id,\n      messageId: telegramTriggerData.message.message_id\n    }\n  };\n});"
+      },
+      "id": "6d112516-86fa-4283-92d2-afa562d23a0e",
+      "name": "Prepare Audio for Speech API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User said: {{ $json.results[0].alternatives[0].transcript }}",
+        "options": {
+          "systemMessage": "You are a helpful AI assistant responding to voice messages on Telegram. Provide clear, concise, and friendly responses to user questions. Keep your responses conversational and natural."
+        }
+      },
+      "id": "ac88fc14-8c16-49e4-b7dc-ab4c8671499a",
+      "name": "AI Response Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1520,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "56c8a4b4-1813-44ea-a02d-b969b493d992",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1472,
+        592
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "rRpziPVdvouebeDn",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram Voice Message Trigger').item.json.message.chat.id }}"
+      },
+      "id": "7caa6fc3-fee0-4c50-8fea-294037e87bcb",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1664,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Prepare Audio for Speech API').item.json.chatId }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a46aac71-7f35-4692-b654-048c053bc515",
+      "name": "Send Response to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1872,
+        368
+      ],
+      "webhookId": "e61332d7-4f6a-458c-ab65-0a7515e234a2",
+      "credentials": {
+        "telegramApi": {
+          "id": "8NTZjdUwSQ1Nsa2z",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot8579089777:AAFUPhrF8hVvK7wM2ySJjSicbTlBCwlSKw4/{{ $json.result.file_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "voiceFile"
+            }
+          }
+        }
+      },
+      "id": "c264c397-4f3f-4e06-b884-b64d67a0d378",
+      "name": "Get Actual Voice File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        848,
+        368
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Voice Message Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download Voice File from Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audio for Speech API": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Audio with Google Speech-to-Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio with Google Speech-to-Text": {
+      "main": [
+        [
+          {
+            "node": "AI Response Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Response Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Response Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Response Agent": {
+      "main": [
+        [
+          {
+            "node": "Send Response to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Voice File from Telegram": {
+      "main": [
+        [
+          {
+            "node": "Get Actual Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Actual Voice File": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audio for Speech API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "availableInMCP": false
+  },
+  "versionId": "538e2f27-841a-488c-a672-01b41f628584",
+  "meta": {
+    "templateId": "ready-to-run-ai-workflow",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5a954088e5f33a28c922713ca423af9443331ae6416762ebce29750d9e4bad4"
+  },
+  "id": "O69UgN2sbe4qV50O",
+  "tags": []
+}
